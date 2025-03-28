@@ -8,37 +8,39 @@
     <link rel="preconnect" href="https://rsms.me/">
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
     <style>
-        /* Use Inter font */
         html { font-family: 'Inter', sans-serif; }
         @supports (font-variation-settings: normal) {
           html { font-family: 'Inter var', sans-serif; }
         }
-        /* Simple card transition */
-        #item-card {
-            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        #item-card { transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out; }
+        .card-exit-left { transform: translateX(-150%) rotate(-15deg); opacity: 0; }
+        .card-exit-right { transform: translateX(150%) rotate(15deg); opacity: 0; }
+        .card-enter { transform: scale(0.8); opacity: 0; }
+        .user-button-selected { background-color: #10b981; color: white; font-weight: 600; }
+        .status-message { min-height: 2rem; transition: opacity 0.3s ease-in-out; }
+        input[type="text"] {
+             appearance: none; border: 1px solid #cbd5e1; padding: 0.5rem 0.75rem;
+             border-radius: 0.375rem; transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
         }
-        .card-exit-left {
-            transform: translateX(-150%) rotate(-15deg);
-            opacity: 0;
+        input[type="text"]:focus {
+             outline: none; border-color: #4f46e5; box-shadow: 0 0 0 2px #c7d2fe;
         }
-        .card-exit-right {
-            transform: translateX(150%) rotate(15deg);
-            opacity: 0;
+        .icon-button {
+             width: 1em; height: 1em; vertical-align: -0.125em; display: inline-block;
         }
-        .card-enter {
-            transform: scale(0.8);
-            opacity: 0;
-        }
-        /* Style for selected user button */
-        .user-button-selected {
-            background-color: #10b981; /* Tailwind emerald-500 */
-            color: white;
+        #add-item-spinner { display: inline-block; }
+        #add-item-spinner.hidden { display: none; }
+        /* Style for new item notification */
+        #new-items-indicator {
+            font-size: 0.7rem;
+            color: #db2777; /* pink-600 */
             font-weight: 600;
-        }
-        /* Style for loading/error messages */
-        .status-message {
-            min-height: 2rem; /* Reserve space */
+            margin-left: 0.5rem;
+            opacity: 0;
             transition: opacity 0.3s ease-in-out;
+        }
+        #new-items-indicator.visible {
+            opacity: 1;
         }
     </style>
 </head>
@@ -46,19 +48,45 @@
 
     <div class="w-full max-w-md bg-white rounded-xl shadow-xl p-6 text-center">
 
-        <div class="mb-6">
+        <div class="mb-6 border-b pb-4">
             <h2 class="text-lg font-semibold mb-2 text-slate-600">Select User:</h2>
             <div class="flex justify-center space-x-3">
                 <button id="user1-btn" onclick="selectUser('user1')" class="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 transition duration-200">User 1</button>
                 <button id="user2-btn" onclick="selectUser('user2')" class="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 transition duration-200">User 2</button>
             </div>
             <p class="mt-2 text-sm text-slate-500">Current User: <span id="current-user-display" class="font-medium">None</span></p>
+            <div class="mt-3 text-center">
+                <button id="reset-swipes-btn" onclick="handleResetSwipes()" class="px-3 py-1 text-xs bg-red-500 text-white rounded-md shadow-sm hover:bg-red-600 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-button"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 7.54 5.04"></path><path d="M3.51 15a9 9 0 0 0 12.95 3.96"></path></svg>
+                    Reset My Swipes
+                </button>
+            </div>
+        </div>
+
+        <div class="mb-6 border-b pb-4">
+            <h2 class="text-lg font-semibold mb-2 text-slate-600">Add New Item</h2>
+            <div class="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-2">
+                <input type="text" id="new-item-title" placeholder="Enter item title" class="flex-grow w-full sm:w-auto border rounded-md px-3 py-1.5 focus:ring-indigo-500 focus:border-indigo-500">
+                <button id="add-item-btn" onclick="handleAddItem()" class="w-full sm:w-auto px-4 py-1.5 bg-indigo-500 text-white rounded-md shadow-sm hover:bg-indigo-600 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2">
+                     <span>Add Item</span>
+                    <span id="add-item-spinner" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                 </button>
+            </div>
+             <p id="add-item-status" class="text-sm mt-2 text-slate-500 min-h-[1.25rem]"></p>
+        </div>
+
+        <div class="mb-6 text-right flex justify-end items-center">
+
+            <span id="new-items-indicator">New items available!</span>
+            <button id="refresh-btn" onclick="handleRefresh()" class="ml-2 px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md shadow-sm hover:bg-blue-600 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-button refresh-icon"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+                Refresh List
+            </button>
         </div>
 
         <div id="item-card-container" class="relative h-48 flex items-center justify-center mb-6 overflow-hidden">
              <div id="loading-items" class="text-slate-500">Loading items...</div>
         </div>
-
 
         <div id="swipe-buttons" class="flex justify-center space-x-6 opacity-0 transition-opacity duration-300">
              <button id="nope-btn" onclick="handleSwipe('left')" class="disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center w-16 h-16 bg-red-100 text-red-600 rounded-full shadow-md hover:bg-red-200 transition duration-200 disabled:hover:bg-red-100" disabled>
@@ -84,14 +112,20 @@
 
     <script>
         // --- Configuration ---
-        const API_BASE_URL = "https://ide-9yxi.onrender.com"; // Your Render backend URL
+        const API_BASE_URL = "https://ide-9yxi.onrender.com";
+        const LOCAL_STORAGE_KEY_PREFIX = 'swipeData_';
+        const POLLING_INTERVAL_MS = 10000; // Check for new items every 10 seconds
 
         // --- State Variables ---
-        let currentUser = null; // 'user1' or 'user2'
-        let items = []; // Array of item objects {id: '...', title: '...'}
+        let currentUser = null;
+        let items = [];
         let currentItemIndex = 0;
-        let matchedItems = []; // Array of matched item objects
-        let isLoading = false; // Prevent multiple simultaneous requests
+        let userSwipedData = {};
+        let matchedItems = [];
+        let isLoading = false;
+        let isAddingItem = false;
+        let pollIntervalId = null; // ID for the polling timer
+        let currentBackendItemCount = 0; // Track backend item count for polling comparison
 
         // --- DOM Elements ---
         const user1Btn = document.getElementById('user1-btn');
@@ -105,244 +139,409 @@
         const statusMessageEl = document.getElementById('status-message');
         const matchListEl = document.getElementById('match-list');
         const noMatchesLi = document.getElementById('no-matches');
+        const newItemTitleInput = document.getElementById('new-item-title');
+        const addItemBtn = document.getElementById('add-item-btn');
+        const addItemStatusEl = document.getElementById('add-item-status');
+        const addItemSpinner = document.getElementById('add-item-spinner');
+        const refreshBtn = document.getElementById('refresh-btn');
+        const resetSwipesBtn = document.getElementById('reset-swipes-btn');
+        const newItemsIndicator = document.getElementById('new-items-indicator'); // Indicator element
 
-        // --- Functions ---
+
+        // --- LocalStorage Helper Functions ---
+        function getSwipedData(userId) { /* ... (same as before) ... */
+            if (!userId) return {};
+            const key = `${LOCAL_STORAGE_KEY_PREFIX}${userId}`;
+            try {
+                const data = localStorage.getItem(key);
+                return data ? JSON.parse(data) : {};
+            } catch (e) {
+                console.error("Error reading swipe data from localStorage:", e);
+                return {};
+            }
+        }
+        function saveSwipedData(userId, data) { /* ... (same as before) ... */
+            if (!userId) return;
+            const key = `${LOCAL_STORAGE_KEY_PREFIX}${userId}`;
+            try {
+                localStorage.setItem(key, JSON.stringify(data));
+            } catch (e) {
+                console.error("Error saving swipe data to localStorage:", e);
+            }
+        }
+        function updateLocalStorageSwipe(userId, itemId, direction) { /* ... (same as before) ... */
+             if (!userId || !itemId) return;
+             userSwipedData[itemId] = direction;
+             saveSwipedData(userId, userSwipedData);
+        }
+        function isItemSwiped(itemId) { /* ... (same as before) ... */
+             return userSwipedData.hasOwnProperty(itemId);
+        }
+        function findNextUnswipedItemIndex(startIndex) { /* ... (same as before) ... */
+             if (!currentUser) return -1;
+             let nextIndex = startIndex;
+             while (nextIndex < items.length) {
+                 const item = items[nextIndex];
+                 if (!isItemSwiped(item.id)) { return nextIndex; }
+                 nextIndex++;
+             }
+             return nextIndex;
+        }
+
+        // --- Polling Functions ---
+        function startPolling() {
+            stopPolling(); // Clear any existing interval
+            if (!currentUser) return; // Don't poll if no user selected
+            console.log("Starting polling for new items...");
+            // Run immediately once, then set interval
+            checkItemsForChanges();
+            pollIntervalId = setInterval(checkItemsForChanges, POLLING_INTERVAL_MS);
+        }
+
+        function stopPolling() {
+            if (pollIntervalId) {
+                console.log("Stopping polling.");
+                clearInterval(pollIntervalId);
+                pollIntervalId = null;
+            }
+            // Hide indicator when polling stops (e.g., user change)
+             newItemsIndicator.classList.remove('visible');
+        }
+
+        async function checkItemsForChanges() {
+            // Don't poll if busy or no user
+            if (isLoading || isAddingItem || !currentUser) {
+                console.log("Polling skipped (busy or no user).");
+                return;
+            }
+
+            console.log("Polling: Checking for item changes...");
+            try {
+                const response = await fetch(`${API_BASE_URL}/items`);
+                if (!response.ok) {
+                    console.warn(`Polling check failed: ${response.status}`);
+                    return; // Don't stop polling on temporary errors
+                }
+                const data = await response.json();
+                const backendCount = data.items?.length ?? 0;
+
+                console.log(`Polling: Current backend count=${backendCount}, Known count=${currentBackendItemCount}`);
+
+                // Show indicator if backend has more items than we last knew about
+                if (backendCount > currentBackendItemCount) {
+                    console.log("Polling: New items detected!");
+                    newItemsIndicator.classList.add('visible');
+                } else {
+                     // Optional: Hide if counts match again after a refresh?
+                     // Or just let refresh hide it. Let's keep it simple.
+                }
+
+            } catch (error) {
+                console.error("Polling error:", error);
+                // Don't stop polling on error
+            }
+        }
+
+
+        // --- Core Functions ---
 
         function selectUser(userId) {
             currentUser = userId;
             currentUserDisplay.textContent = userId;
-            // Update button styles
             user1Btn.classList.toggle('user-button-selected', userId === 'user1');
             user2Btn.classList.toggle('user-button-selected', userId === 'user2');
             user1Btn.classList.toggle('bg-slate-200', userId !== 'user1');
             user2Btn.classList.toggle('bg-slate-200', userId !== 'user2');
 
-            // Fetch items if a user is selected and items aren't loaded yet
-            if (currentUser && items.length === 0) {
-                fetchItems();
-                fetchMatches(); // Also fetch initial matches for this user
-            } else if (currentUser) {
-                // If user changes, ensure buttons are enabled/disabled correctly
-                enableDisableSwipeButtons();
-                fetchMatches(); // Refresh matches for the new user
-            }
+            userSwipedData = getSwipedData(currentUser);
+            console.log(`Loaded swipe data for ${currentUser}:`, userSwipedData);
+
+            resetSwipesBtn.disabled = false;
+            refreshBtn.disabled = false;
+
+            currentItemIndex = 0;
+            // Fetch items, then find first unswiped and display
+            fetchItems().then(() => {
+                currentItemIndex = findNextUnswipedItemIndex(0);
+                currentBackendItemCount = items.length; // Initialize count after fetch
+                displayCurrentItem();
+                startPolling(); // Start polling after initial load for this user
+            });
+            fetchMatches();
         }
 
         async function fetchItems() {
-            if (isLoading) return;
+            if (isLoading && !isAddingItem) return;
             isLoading = true;
+            stopPolling(); // Pause polling during fetch
+            refreshBtn.disabled = true;
+            resetSwipesBtn.disabled = true;
             loadingItemsIndicator.textContent = "Fetching items...";
             loadingItemsIndicator.style.display = 'block';
+            itemCardContainer.innerHTML = '';
+            itemCardContainer.appendChild(loadingItemsIndicator);
+            disableSwipeButtons();
             clearStatus();
+            newItemsIndicator.classList.remove('visible'); // Hide indicator on refresh
 
             try {
                 const response = await fetch(`${API_BASE_URL}/items`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const data = await response.json();
                 items = data.items || [];
-                currentItemIndex = 0; // Reset index
+                currentBackendItemCount = items.length; // Update known count
                 console.log("Items fetched:", items);
-                 if (items.length > 0) {
-                    loadingItemsIndicator.style.display = 'none';
-                    displayCurrentItem();
-                 } else {
-                    loadingItemsIndicator.textContent = "No items loaded in backend.";
-                    disableSwipeButtons(); // Disable if no items
-                 }
-
             } catch (error) {
                 console.error("Error fetching items:", error);
                 loadingItemsIndicator.textContent = "Error loading items.";
+                loadingItemsIndicator.style.display = 'block';
                 setStatus(`Error fetching items: ${error.message}`, true);
-                disableSwipeButtons();
+                items = [];
+                currentBackendItemCount = 0; // Reset count on error
             } finally {
                 isLoading = false;
+                const userSelected = !!currentUser;
+                refreshBtn.disabled = !userSelected;
+                resetSwipesBtn.disabled = !userSelected;
+                if (items.length === 0) { displayCurrentItem(); }
+                startPolling(); // Resume polling after fetch attempt
             }
         }
 
         function displayCurrentItem() {
-            // Clear previous card immediately
-            itemCardContainer.innerHTML = ''; // Clear container
+            itemCardContainer.innerHTML = '';
 
-            if (currentItemIndex >= items.length) {
-                itemCardContainer.innerHTML = `<div class="text-slate-500 font-medium p-4">No more items!</div>`;
-                disableSwipeButtons();
-                return;
+            if (currentItemIndex < 0 || currentItemIndex >= items.length) {
+                 let message = "No items loaded in backend.";
+                 if (items.length > 0) { message = "No more items to swipe! Add or reset?"; }
+                 itemCardContainer.innerHTML = `<div class="text-slate-500 font-medium p-4">${message}</div>`;
+                 disableSwipeButtons();
+                 return;
             }
 
             const item = items[currentItemIndex];
-
-            // Create new card element (off-screen initially)
             const card = document.createElement('div');
             card.id = 'item-card';
-            card.className = 'absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 to-purple-200 p-6 rounded-lg shadow-md text-slate-700 card-enter'; // Start scaled down and faded
-            card.innerHTML = `<h3 class="text-xl font-bold mb-2">${item.title || 'Unnamed Item'}</h3><p class="text-sm text-slate-500">(ID: ${item.id})</p>`; // Added ID for reference
-
+            card.className = 'absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 to-purple-200 p-6 rounded-lg shadow-md text-slate-700 card-enter';
+            card.innerHTML = `<h3 class="text-xl font-bold mb-2">${item.title || 'Unnamed Item'}</h3>`;
             itemCardContainer.appendChild(card);
 
-             // Force reflow to apply initial state before transition
             void card.offsetWidth;
-
-            // Animate in
-            requestAnimationFrame(() => {
-                 card.classList.remove('card-enter');
-            });
-
+            requestAnimationFrame(() => card.classList.remove('card-enter'));
             enableDisableSwipeButtons();
         }
 
+
         async function handleSwipe(direction) {
-            if (!currentUser || currentItemIndex >= items.length || isLoading) {
-                console.warn("Swipe ignored: No user, no items left, or already loading.");
-                return;
-            }
+            if (!currentUser || currentItemIndex >= items.length || isLoading || isAddingItem) { return; }
 
             const item = items[currentItemIndex];
             const itemId = item.id;
+            updateLocalStorageSwipe(currentUser, itemId, direction);
+            console.log(`Locally recorded swipe: ${currentUser}, ${itemId}, ${direction}`);
 
-            // Animate card out
             const card = document.getElementById('item-card');
-            if (card) {
-                card.classList.add(direction === 'left' ? 'card-exit-left' : 'card-exit-right');
-            }
+            if (card) { card.classList.add(direction === 'left' ? 'card-exit-left' : 'card-exit-right'); }
 
-             disableSwipeButtons(); // Disable buttons during request
-             setStatus("Sending swipe...");
-             isLoading = true;
+            disableSwipeButtons();
+            setStatus("Sending swipe...");
+            isLoading = true;
+            stopPolling(); // Pause polling during swipe
+            refreshBtn.disabled = true;
+            resetSwipesBtn.disabled = true;
 
             try {
                 const response = await fetch(`${API_BASE_URL}/swipe`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        user_id: currentUser,
-                        item_id: itemId,
-                        direction: direction,
-                    }),
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: currentUser, item_id: itemId, direction: direction }),
                 });
 
                 if (!response.ok) {
-                     const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
-                    throw new Error(`Swipe failed: ${errorData.error || response.statusText}`);
-                }
-
-                const result = await response.json();
-                console.log("Swipe result:", result);
-                setStatus(`Swipe recorded. ${result.match_status || ''}`);
-
-                // If a match was found by this swipe, fetch updated matches
-                if (result.match_status && result.match_status.includes("Match found")) {
-                    await fetchMatches(); // Update match list immediately
-                    setStatus(`🎉 Match found on "${item.title}"!`);
-                }
-
-                // Wait for animation before showing next card
-                setTimeout(() => {
-                    currentItemIndex++;
-                    displayCurrentItem();
-                    // Re-enable buttons if there are more items
-                    if (currentItemIndex < items.length) {
-                       enableDisableSwipeButtons();
+                     console.error(`Backend swipe failed: ${response.statusText}`);
+                } else {
+                    const result = await response.json();
+                    console.log("Backend swipe result:", result);
+                    if (result.match_status && result.match_status.includes("Match found")) {
+                        await fetchMatches();
+                        setStatus(`🎉 Match found on "${item.title}"!`);
+                    } else {
+                         clearStatus(1500);
                     }
-                    if (!result.match_status || !result.match_status.includes("Match found")) {
-                       // Clear status message if it wasn't a match message
-                       clearStatus(1500); // Clear after 1.5 seconds
-                    }
-                }, 300); // Match animation duration
-
+                }
             } catch (error) {
-                console.error("Error sending swipe:", error);
-                setStatus(`Error: ${error.message}`, true);
-                 // If swipe failed, maybe bring card back? Or just allow retry?
-                 // For simplicity, we'll just show error and let user try next item or retry manually
-                 // Re-enable buttons after error display
-                 setTimeout(() => {
-                     enableDisableSwipeButtons(); // Re-enable buttons after error
-                     clearStatus(3000); // Clear error after 3 seconds
-                 }, 500);
-                 // Reset card if it animated out
-                 if (card) {
-                     card.classList.remove('card-exit-left', 'card-exit-right');
-                 }
-
+                console.error("Error sending swipe to backend:", error);
+                setStatus(`Swipe saved locally, but backend error: ${error.message}`, true);
+                clearStatus(3000);
             } finally {
-                 isLoading = false; // Allow next action
+                isLoading = false;
+                const userSelected = !!currentUser;
+                refreshBtn.disabled = !userSelected;
+                resetSwipesBtn.disabled = !userSelected;
+                startPolling(); // Resume polling
+
+                const nextIndex = findNextUnswipedItemIndex(currentItemIndex + 1);
+                setTimeout(() => {
+                    currentItemIndex = nextIndex;
+                    displayCurrentItem();
+                }, 300);
             }
         }
 
-        async function fetchMatches() {
-             if (!currentUser) return; // Don't fetch if no user selected
+        async function handleAddItem() {
+            const title = newItemTitleInput.value.trim();
+            if (!title) { /* ... (show/clear error) ... */ return; }
+            if (isAddingItem || isLoading) return;
 
-             try {
-                const response = await fetch(`${API_BASE_URL}/matches`);
-                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                matchedItems = data.matched_items || []; // Expecting full items now
-                console.log("Matches fetched:", matchedItems);
-                updateMatchDisplay();
+            isAddingItem = true;
+            stopPolling(); // Pause polling
+            addItemBtn.disabled = true;
+            refreshBtn.disabled = true;
+            resetSwipesBtn.disabled = true;
+            addItemSpinner.classList.remove('hidden');
+            setAddItemStatus("Adding item...");
 
-             } catch (error) {
-                 console.error("Error fetching matches:", error);
-                 setStatus(`Error fetching matches: ${error.message}`, true);
-                 clearStatus(3000);
-             }
+            try {
+                const response = await fetch(`${API_BASE_URL}/add_item`, { /* ... */ });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || `HTTP error! status: ${response.status}`);
+
+                console.log("Add item result:", result);
+                setAddItemStatus(`"${result.item?.title || title}" added! Refreshing list...`, false);
+                newItemTitleInput.value = '';
+
+                // Fetch items, find next unswiped, display
+                await fetchItems(); // fetchItems now updates currentBackendItemCount
+                currentItemIndex = findNextUnswipedItemIndex(0); // Reset view
+                displayCurrentItem();
+
+                clearAddItemStatus(2000);
+
+            } catch (error) { /* ... (handle error) ... */
+                 console.error("Error adding item:", error);
+                 setAddItemStatus(`Error: ${error.message}`, true);
+                 clearAddItemStatus(4000);
+            } finally {
+                isAddingItem = false;
+                const userSelected = !!currentUser;
+                addItemBtn.disabled = false;
+                refreshBtn.disabled = !userSelected;
+                resetSwipesBtn.disabled = !userSelected;
+                addItemSpinner.classList.add('hidden');
+                startPolling(); // Resume polling
+            }
         }
 
-         function updateMatchDisplay() {
-            matchListEl.innerHTML = ''; // Clear previous list
+        function handleRefresh() {
+             if (!currentUser || isLoading || isAddingItem) return;
+             console.log("Refreshing item list...");
+             setStatus("Refreshing list...");
+             newItemsIndicator.classList.remove('visible'); // Hide indicator on manual refresh
+             fetchItems().then(() => {
+                 currentItemIndex = findNextUnswipedItemIndex(0); // Reset view to first unswiped
+                 displayCurrentItem();
+                 clearStatus(1000);
+             });
+        }
+
+        function handleResetSwipes() {
+            if (!currentUser) { /* ... (show error) ... */ return; }
+
+            if (confirm(`Are you sure you want to reset all swipe history for ${currentUser}?`)) {
+                console.log(`Resetting swipes for ${currentUser}`);
+                const key = `${LOCAL_STORAGE_KEY_PREFIX}${currentUser}`;
+                localStorage.removeItem(key);
+                userSwipedData = {};
+
+                // --- Clear matches ---
+                matchedItems = [];
+                updateMatchDisplay(); // Update UI to show "No matches yet"
+                // --- End clear matches ---
+
+                setStatus("Swipe history reset.", false);
+                clearStatus(2000);
+
+                currentItemIndex = findNextUnswipedItemIndex(0);
+                displayCurrentItem();
+            }
+        }
+
+
+        async function fetchMatches() { /* ... (same as before) ... */
+             if (!currentUser) return;
+             try {
+                const response = await fetch(`${API_BASE_URL}/matches`);
+                 if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+                const data = await response.json();
+                matchedItems = data.matched_items || [];
+                console.log("Matches fetched:", matchedItems);
+                updateMatchDisplay();
+             } catch (error) {
+                 console.error("Error fetching matches:", error);
+                 if (!statusMessageEl.textContent.includes("Match found")) {
+                     setStatus(`Error fetching matches: ${error.message}`, true);
+                     clearStatus(3000);
+                 }
+             }
+        }
+         function updateMatchDisplay() { /* ... (same as before) ... */
+            matchListEl.innerHTML = '';
             if (matchedItems.length === 0) {
-                matchListEl.appendChild(noMatchesLi); // Show 'no matches' message
+                matchListEl.appendChild(noMatchesLi);
                 noMatchesLi.style.display = 'list-item';
             } else {
-                noMatchesLi.style.display = 'none'; // Hide 'no matches' message
+                noMatchesLi.style.display = 'none';
                 matchedItems.forEach(item => {
                     const li = document.createElement('li');
-                    li.textContent = item.title || `Item ID: ${item.id}`; // Display title or ID
+                    li.textContent = item.title || `Item ID: ${item.id}`;
                     matchListEl.appendChild(li);
                 });
             }
         }
-
-        function enableDisableSwipeButtons() {
-             const enabled = currentUser && currentItemIndex < items.length && !isLoading;
+        function enableDisableSwipeButtons() { /* ... (same as before) ... */
+             const itemAvailable = currentItemIndex < items.length;
+             const enabled = currentUser && itemAvailable && !isLoading && !isAddingItem;
              nopeBtn.disabled = !enabled;
              likeBtn.disabled = !enabled;
              swipeButtons.style.opacity = enabled ? '1' : '0.5';
         }
-
-         function disableSwipeButtons() {
+         function disableSwipeButtons() { /* ... (same as before) ... */
              nopeBtn.disabled = true;
              likeBtn.disabled = true;
              swipeButtons.style.opacity = '0.5';
          }
-
-        function setStatus(message, isError = false) {
+        function setStatus(message, isError = false) { /* ... (same as before) ... */
             statusMessageEl.textContent = message;
-            statusMessageEl.style.color = isError ? '#dc2626' : '#475569'; // red-600 or slate-600
+            statusMessageEl.style.color = isError ? '#dc2626' : '#475569';
             statusMessageEl.style.opacity = '1';
         }
-
-        function clearStatus(delay = 0) {
-            setTimeout(() => {
-                 statusMessageEl.style.opacity = '0';
-                 // Optional: clear text after fade out
-                 // setTimeout(() => { statusMessageEl.textContent = ''; }, 300);
-            }, delay);
+        function clearStatus(delay = 0) { /* ... (same as before) ... */
+             if (!statusMessageEl.textContent.includes("Match found")) {
+                 setTimeout(() => { statusMessageEl.style.opacity = '0'; }, delay);
+             }
         }
-
+        function setAddItemStatus(message, isError = false) { /* ... (same as before) ... */
+             addItemStatusEl.textContent = message;
+             addItemStatusEl.style.color = isError ? '#dc2626' : '#16a34a';
+        }
+        function clearAddItemStatus(delay = 0) { /* ... (same as before) ... */
+             setTimeout(() => { addItemStatusEl.textContent = ''; }, delay);
+        }
 
         // --- Initial Load ---
         document.addEventListener('DOMContentLoaded', () => {
-            // Prompt user selection
             setStatus("Please select a user to begin.");
-            disableSwipeButtons(); // Start with buttons disabled
-            updateMatchDisplay(); // Show initial empty match list
+            disableSwipeButtons();
+            updateMatchDisplay();
+            refreshBtn.disabled = true;
+            resetSwipesBtn.disabled = true;
+             newItemTitleInput.addEventListener('keypress', function (e) {
+                 if (e.key === 'Enter') { handleAddItem(); }
+             });
+             // Stop polling if window/tab loses focus (optional but good practice)
+             // document.addEventListener('visibilitychange', () => {
+             //     if (document.hidden) { stopPolling(); } else { startPolling(); }
+             // });
         });
 
     </script>
