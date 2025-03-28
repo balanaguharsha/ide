@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swipe to Match</title>
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <style>
+        /* Use Inter font */
+        html { font-family: 'Inter', sans-serif; }
+        @supports (font-variation-settings: normal) {
+          html { font-family: 'Inter var', sans-serif; }
+        }
+        /* Simple card transition */
+        #item-card {
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        }
+        .card-exit-left {
+            transform: translateX(-150%) rotate(-15deg);
+            opacity: 0;
+        }
+        .card-exit-right {
+            transform: translateX(150%) rotate(15deg);
+            opacity: 0;
+        }
+        .card-enter {
+            transform: scale(0.8);
+            opacity: 0;
+        }
+        /* Style for selected user button */
+        .user-button-selected {
+            background-color: #10b981; /* Tailwind emerald-500 */
+            color: white;
+            font-weight: 600;
+        }
+        /* Style for loading/error messages */
+        .status-message {
+            min-height: 2rem; /* Reserve space */
+            transition: opacity 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 min-h-screen flex flex-col items-center justify-center p-4 text-slate-800">
+
+    <div class="w-full max-w-md bg-white rounded-xl shadow-xl p-6 text-center">
+
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold mb-2 text-slate-600">Select User:</h2>
+            <div class="flex justify-center space-x-3">
+                <button id="user1-btn" onclick="selectUser('user1')" class="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 transition duration-200">User 1</button>
+                <button id="user2-btn" onclick="selectUser('user2')" class="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 transition duration-200">User 2</button>
+            </div>
+            <p class="mt-2 text-sm text-slate-500">Current User: <span id="current-user-display" class="font-medium">None</span></p>
+        </div>
+
+        <div id="item-card-container" class="relative h-48 flex items-center justify-center mb-6 overflow-hidden">
+             <div id="loading-items" class="text-slate-500">Loading items...</div>
+        </div>
+
+
+        <div id="swipe-buttons" class="flex justify-center space-x-6 opacity-0 transition-opacity duration-300">
+             <button id="nope-btn" onclick="handleSwipe('left')" class="disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center w-16 h-16 bg-red-100 text-red-600 rounded-full shadow-md hover:bg-red-200 transition duration-200 disabled:hover:bg-red-100" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+            </button>
+            <button id="like-btn" onclick="handleSwipe('right')" class="disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center w-16 h-16 bg-green-100 text-green-600 rounded-full shadow-md hover:bg-green-200 transition duration-200 disabled:hover:bg-green-100" disabled>
+                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+            </button>
+        </div>
+
+         <div class="mt-4 status-message text-center">
+            <p id="status-message" class="text-slate-600 font-medium"></p>
+        </div>
+
+        <div class="mt-6 border-t pt-4">
+            <h3 class="text-md font-semibold mb-2 text-slate-600">Matches Found:</h3>
+            <ul id="match-list" class="list-disc list-inside text-left text-sm text-slate-500 pl-2">
+                <li id="no-matches" class="">No matches yet.</li>
+            </ul>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const API_BASE_URL = "https://ide-9yxi.onrender.com"; // Your Render backend URL
+
+        // --- State Variables ---
+        let currentUser = null; // 'user1' or 'user2'
+        let items = []; // Array of item objects {id: '...', title: '...'}
+        let currentItemIndex = 0;
+        let matchedItems = []; // Array of matched item objects
+        let isLoading = false; // Prevent multiple simultaneous requests
+
+        // --- DOM Elements ---
+        const user1Btn = document.getElementById('user1-btn');
+        const user2Btn = document.getElementById('user2-btn');
+        const currentUserDisplay = document.getElementById('current-user-display');
+        const itemCardContainer = document.getElementById('item-card-container');
+        const loadingItemsIndicator = document.getElementById('loading-items');
+        const nopeBtn = document.getElementById('nope-btn');
+        const likeBtn = document.getElementById('like-btn');
+        const swipeButtons = document.getElementById('swipe-buttons');
+        const statusMessageEl = document.getElementById('status-message');
+        const matchListEl = document.getElementById('match-list');
+        const noMatchesLi = document.getElementById('no-matches');
+
+        // --- Functions ---
+
+        function selectUser(userId) {
+            currentUser = userId;
+            currentUserDisplay.textContent = userId;
+            // Update button styles
+            user1Btn.classList.toggle('user-button-selected', userId === 'user1');
+            user2Btn.classList.toggle('user-button-selected', userId === 'user2');
+            user1Btn.classList.toggle('bg-slate-200', userId !== 'user1');
+            user2Btn.classList.toggle('bg-slate-200', userId !== 'user2');
+
+            // Fetch items if a user is selected and items aren't loaded yet
+            if (currentUser && items.length === 0) {
+                fetchItems();
+                fetchMatches(); // Also fetch initial matches for this user
+            } else if (currentUser) {
+                // If user changes, ensure buttons are enabled/disabled correctly
+                enableDisableSwipeButtons();
+                fetchMatches(); // Refresh matches for the new user
+            }
+        }
+
+        async function fetchItems() {
+            if (isLoading) return;
+            isLoading = true;
+            loadingItemsIndicator.textContent = "Fetching items...";
+            loadingItemsIndicator.style.display = 'block';
+            clearStatus();
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/items`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                items = data.items || [];
+                currentItemIndex = 0; // Reset index
+                console.log("Items fetched:", items);
+                 if (items.length > 0) {
+                    loadingItemsIndicator.style.display = 'none';
+                    displayCurrentItem();
+                 } else {
+                    loadingItemsIndicator.textContent = "No items loaded in backend.";
+                    disableSwipeButtons(); // Disable if no items
+                 }
+
+            } catch (error) {
+                console.error("Error fetching items:", error);
+                loadingItemsIndicator.textContent = "Error loading items.";
+                setStatus(`Error fetching items: ${error.message}`, true);
+                disableSwipeButtons();
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        function displayCurrentItem() {
+            // Clear previous card immediately
+            itemCardContainer.innerHTML = ''; // Clear container
+
+            if (currentItemIndex >= items.length) {
+                itemCardContainer.innerHTML = `<div class="text-slate-500 font-medium p-4">No more items!</div>`;
+                disableSwipeButtons();
+                return;
+            }
+
+            const item = items[currentItemIndex];
+
+            // Create new card element (off-screen initially)
+            const card = document.createElement('div');
+            card.id = 'item-card';
+            card.className = 'absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 to-purple-200 p-6 rounded-lg shadow-md text-slate-700 card-enter'; // Start scaled down and faded
+            card.innerHTML = `<h3 class="text-xl font-bold mb-2">${item.title || 'Unnamed Item'}</h3><p class="text-sm text-slate-500">(ID: ${item.id})</p>`; // Added ID for reference
+
+            itemCardContainer.appendChild(card);
+
+             // Force reflow to apply initial state before transition
+            void card.offsetWidth;
+
+            // Animate in
+            requestAnimationFrame(() => {
+                 card.classList.remove('card-enter');
+            });
+
+            enableDisableSwipeButtons();
+        }
+
+        async function handleSwipe(direction) {
+            if (!currentUser || currentItemIndex >= items.length || isLoading) {
+                console.warn("Swipe ignored: No user, no items left, or already loading.");
+                return;
+            }
+
+            const item = items[currentItemIndex];
+            const itemId = item.id;
+
+            // Animate card out
+            const card = document.getElementById('item-card');
+            if (card) {
+                card.classList.add(direction === 'left' ? 'card-exit-left' : 'card-exit-right');
+            }
+
+             disableSwipeButtons(); // Disable buttons during request
+             setStatus("Sending swipe...");
+             isLoading = true;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/swipe`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: currentUser,
+                        item_id: itemId,
+                        direction: direction,
+                    }),
+                });
+
+                if (!response.ok) {
+                     const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+                    throw new Error(`Swipe failed: ${errorData.error || response.statusText}`);
+                }
+
+                const result = await response.json();
+                console.log("Swipe result:", result);
+                setStatus(`Swipe recorded. ${result.match_status || ''}`);
+
+                // If a match was found by this swipe, fetch updated matches
+                if (result.match_status && result.match_status.includes("Match found")) {
+                    await fetchMatches(); // Update match list immediately
+                    setStatus(`🎉 Match found on "${item.title}"!`);
+                }
+
+                // Wait for animation before showing next card
+                setTimeout(() => {
+                    currentItemIndex++;
+                    displayCurrentItem();
+                    // Re-enable buttons if there are more items
+                    if (currentItemIndex < items.length) {
+                       enableDisableSwipeButtons();
+                    }
+                    if (!result.match_status || !result.match_status.includes("Match found")) {
+                       // Clear status message if it wasn't a match message
+                       clearStatus(1500); // Clear after 1.5 seconds
+                    }
+                }, 300); // Match animation duration
+
+            } catch (error) {
+                console.error("Error sending swipe:", error);
+                setStatus(`Error: ${error.message}`, true);
+                 // If swipe failed, maybe bring card back? Or just allow retry?
+                 // For simplicity, we'll just show error and let user try next item or retry manually
+                 // Re-enable buttons after error display
+                 setTimeout(() => {
+                     enableDisableSwipeButtons(); // Re-enable buttons after error
+                     clearStatus(3000); // Clear error after 3 seconds
+                 }, 500);
+                 // Reset card if it animated out
+                 if (card) {
+                     card.classList.remove('card-exit-left', 'card-exit-right');
+                 }
+
+            } finally {
+                 isLoading = false; // Allow next action
+            }
+        }
+
+        async function fetchMatches() {
+             if (!currentUser) return; // Don't fetch if no user selected
+
+             try {
+                const response = await fetch(`${API_BASE_URL}/matches`);
+                 if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                matchedItems = data.matched_items || []; // Expecting full items now
+                console.log("Matches fetched:", matchedItems);
+                updateMatchDisplay();
+
+             } catch (error) {
+                 console.error("Error fetching matches:", error);
+                 setStatus(`Error fetching matches: ${error.message}`, true);
+                 clearStatus(3000);
+             }
+        }
+
+         function updateMatchDisplay() {
+            matchListEl.innerHTML = ''; // Clear previous list
+            if (matchedItems.length === 0) {
+                matchListEl.appendChild(noMatchesLi); // Show 'no matches' message
+                noMatchesLi.style.display = 'list-item';
+            } else {
+                noMatchesLi.style.display = 'none'; // Hide 'no matches' message
+                matchedItems.forEach(item => {
+                    const li = document.createElement('li');
+                    li.textContent = item.title || `Item ID: ${item.id}`; // Display title or ID
+                    matchListEl.appendChild(li);
+                });
+            }
+        }
+
+        function enableDisableSwipeButtons() {
+             const enabled = currentUser && currentItemIndex < items.length && !isLoading;
+             nopeBtn.disabled = !enabled;
+             likeBtn.disabled = !enabled;
+             swipeButtons.style.opacity = enabled ? '1' : '0.5';
+        }
+
+         function disableSwipeButtons() {
+             nopeBtn.disabled = true;
+             likeBtn.disabled = true;
+             swipeButtons.style.opacity = '0.5';
+         }
+
+        function setStatus(message, isError = false) {
+            statusMessageEl.textContent = message;
+            statusMessageEl.style.color = isError ? '#dc2626' : '#475569'; // red-600 or slate-600
+            statusMessageEl.style.opacity = '1';
+        }
+
+        function clearStatus(delay = 0) {
+            setTimeout(() => {
+                 statusMessageEl.style.opacity = '0';
+                 // Optional: clear text after fade out
+                 // setTimeout(() => { statusMessageEl.textContent = ''; }, 300);
+            }, delay);
+        }
+
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Prompt user selection
+            setStatus("Please select a user to begin.");
+            disableSwipeButtons(); // Start with buttons disabled
+            updateMatchDisplay(); // Show initial empty match list
+        });
+
+    </script>
+</body>
+</html>
